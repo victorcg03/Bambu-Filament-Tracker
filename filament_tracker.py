@@ -468,6 +468,20 @@ class FilamentTracker:
         app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
         app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
+        @app.after_request
+        def set_security_headers(response):
+            response.headers['Content-Security-Policy'] = (
+                "default-src 'self'; "
+                "script-src 'self' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src https://fonts.gstatic.com; "
+                "img-src 'self' data:; "
+                "connect-src 'self'"
+            )
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+            return response
+
         tracker = self
 
         @app.route('/')
