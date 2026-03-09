@@ -3,6 +3,7 @@
 // =============================================================================
 
 const POLL_INTERVAL = 5000; // 5 seconds
+const API_KEY = document.querySelector('meta[name="api-key"]')?.content || '';
 
 let spoolsData = [];
 let statusData = {};
@@ -405,7 +406,7 @@ function renderAlertsPanel(alerts) {
 
 async function dismissAlert(trayUuid) {
     try {
-        await fetch(`/api/alerts/${trayUuid}`, { method: 'DELETE' });
+        await fetch(`/api/alerts/${trayUuid}`, { method: 'DELETE', headers: { 'X-API-Key': API_KEY } });
         loadAll();
     } catch (err) {
         console.error('Failed to dismiss alert:', err);
@@ -420,7 +421,7 @@ async function saveThreshold() {
     try {
         await fetch('/api/settings/alert_threshold', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
             body: JSON.stringify({ alert_threshold_grams: val }),
         });
         loadAll();
@@ -541,7 +542,7 @@ function renderModal(spool) {
 async function deleteSpool(trayUuid) {
     if (!confirm('Are you sure you want to delete this spool? This will remove all its history.')) return;
     try {
-        await fetch(`/api/spools/${trayUuid}`, { method: 'DELETE' });
+        await fetch(`/api/spools/${trayUuid}`, { method: 'DELETE', headers: { 'X-API-Key': API_KEY } });
         closeModal();
         loadAll();
     } catch (err) {
@@ -561,7 +562,7 @@ async function saveSpool(trayUuid) {
     try {
         await fetch(`/api/spools/${trayUuid}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
             body: JSON.stringify(payload),
         });
         loadAll();

@@ -35,6 +35,11 @@ BAMBU_PRINTER_SERIAL = "YOUR_PRINTER_SERIAL_HERE"
 FILAMENT_TRACKER_PORT = 5000
 FILAMENT_TRACKER_HOST = "0.0.0.0"  # Listen on all interfaces
 
+# Optional API key to protect write endpoints (PATCH/DELETE/POST).
+# Leave empty to allow unrestricted access (original behavior).
+# Can also be set via FILAMENT_TRACKER_API_KEY environment variable.
+FILAMENT_TRACKER_API_KEY = ""
+
 # Alert when a spool drops below this weight (grams). Set to 0 to disable.
 FILAMENT_LOW_ALERT_GRAMS = 150
 
