@@ -10,9 +10,13 @@ COPY templates/ templates/
 COPY static/ static/
 COPY config.example.py .
 
+RUN useradd -m -u 1000 app
+
 ENV FILAMENT_TRACKER_DATA_DIR=/app/data
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chown app:app /app/data
 VOLUME /app/data
+
+USER app
 
 EXPOSE 5000
 

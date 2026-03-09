@@ -115,10 +115,13 @@ class FilamentTracker:
                 );
             """)
             # Add columns if upgrading from older schema
-            for col, default in [("is_rfid", "INTEGER DEFAULT 1"),
-                                 ("weight_offset", "INTEGER DEFAULT 0")]:
+            _MIGRATION_COLUMNS = {
+                "is_rfid": "INTEGER DEFAULT 1",
+                "weight_offset": "INTEGER DEFAULT 0",
+            }
+            for col, col_type in _MIGRATION_COLUMNS.items():
                 try:
-                    conn.execute(f"ALTER TABLE spools ADD COLUMN {col} {default}")
+                    conn.execute(f"ALTER TABLE spools ADD COLUMN {col} {col_type}")
                 except sqlite3.OperationalError:
                     pass  # Column already exists
             conn.close()
