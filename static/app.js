@@ -3,12 +3,23 @@
 // =============================================================================
 
 const POLL_INTERVAL = 5000; // 5 seconds
+const API_KEY = document.querySelector('meta[name="api-key"]')?.content || '';
 
 let spoolsData = [];
 let statusData = {};
 let currentSort = 'last_seen';
 
 // ---- Helpers ----
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 function hexToRgb(hex) {
     const h = hex.replace('#', '').substring(0, 6);
@@ -395,7 +406,7 @@ function renderAlertsPanel(alerts) {
 
 async function dismissAlert(trayUuid) {
     try {
-        await fetch(`/api/alerts/${trayUuid}`, { method: 'DELETE' });
+        await fetch(`/api/alerts/${trayUuid}`, { method: 'DELETE', headers: { 'X-API-Key': API_KEY } });
         loadAll();
     } catch (err) {
         console.error('Failed to dismiss alert:', err);
@@ -410,7 +421,7 @@ async function saveThreshold() {
     try {
         await fetch('/api/settings/alert_threshold', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
             body: JSON.stringify({ alert_threshold_grams: val }),
         });
         loadAll();
@@ -449,13 +460,14 @@ function closeModal() {
 function renderModal(spool) {
     const modal = document.getElementById('modal-content');
 
+    const safeUuid = escapeHtml(spool.tray_uuid);
     modal.innerHTML = `
         <button class="modal-close" onclick="closeModal()">&times;</button>
         <div class="modal-header">
             <div id="modal-spool-icon"></div>
             <div>
-                <div class="modal-title">${spoolName(spool)}</div>
-                <div class="modal-subtitle">${spool.material_type || ''} &middot; #${(spool.color_hex || '').substring(0, 6)}${spool.is_rfid === 0 ? ' <span class="status-badge norfid">Non-RFID</span>' : ''}</div>
+                <div class="modal-title">${escapeHtml(spoolName(spool))}</div>
+                <div class="modal-subtitle">${escapeHtml(spool.material_type || '')} &middot; #${escapeHtml((spool.color_hex || '').substring(0, 6))}${spool.is_rfid === 0 ? ' <span class="status-badge norfid">Non-RFID</span>' : ''}</div>
             </div>
         </div>
 
@@ -496,7 +508,7 @@ function renderModal(spool) {
 
         <div class="editable-field">
             <label>Custom Name</label>
-            <input type="text" id="edit-name" value="${spool.custom_name || ''}" placeholder="Give this spool a name...">
+            <input type="text" id="edit-name" value="${escapeHtml(spool.custom_name || '')}" placeholder="Give this spool a name...">
         </div>
         ${spool.is_rfid !== 0 ? `<div class="editable-field">
             <label>Weight Offset (grams)</label>
@@ -505,11 +517,11 @@ function renderModal(spool) {
         </div>` : ''}
         <div class="editable-field">
             <label>Notes</label>
-            <textarea id="edit-notes" placeholder="Add notes...">${spool.notes || ''}</textarea>
+            <textarea id="edit-notes" placeholder="Add notes...">${escapeHtml(spool.notes || '')}</textarea>
         </div>
         <div class="modal-actions">
-            <button class="save-btn" onclick="saveSpool('${spool.tray_uuid}')">Save Changes</button>
-            <button class="delete-btn" onclick="deleteSpool('${spool.tray_uuid}')">Delete Spool</button>
+            <button class="save-btn" onclick="saveSpool('${safeUuid}')">Save Changes</button>
+            <button class="delete-btn" onclick="deleteSpool('${safeUuid}')">Delete Spool</button>
         </div>
 
         <div class="chart-section">
@@ -530,7 +542,7 @@ function renderModal(spool) {
 async function deleteSpool(trayUuid) {
     if (!confirm('Are you sure you want to delete this spool? This will remove all its history.')) return;
     try {
-        await fetch(`/api/spools/${trayUuid}`, { method: 'DELETE' });
+        await fetch(`/api/spools/${trayUuid}`, { method: 'DELETE', headers: { 'X-API-Key': API_KEY } });
         closeModal();
         loadAll();
     } catch (err) {
@@ -550,7 +562,7 @@ async function saveSpool(trayUuid) {
     try {
         await fetch(`/api/spools/${trayUuid}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
             body: JSON.stringify(payload),
         });
         loadAll();

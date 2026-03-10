@@ -27,6 +27,7 @@ import sqlite3
 import sys
 import time
 import logging
+import hmac
 import threading
 import random
 from datetime import datetime, timedelta, timezone
@@ -39,7 +40,7 @@ logger = logging.getLogger(__name__)
 _SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR = os.environ.get('FILAMENT_TRACKER_DATA_DIR', _SERVER_DIR)
 DB_PATH = os.path.join(_DATA_DIR, 'filament_tracker.db')
-TEST_DB_PATH = os.path.join(_SERVER_DIR, 'filament_tracker_test.db')
+TEST_DB_PATH = os.path.join(_DATA_DIR, 'filament_tracker_test.db')
 
 # Prefix used for synthetic IDs (non-RFID spools)
 SYNTHETIC_ID_PREFIX = "NORFID_"
@@ -49,13 +50,15 @@ class FilamentTracker:
     """Manages filament spool tracking with SQLite persistence and a Flask web UI."""
 
     def __init__(self, bridge=None, port=5000, host='0.0.0.0',
-                 low_alert_grams=150, low_alert_fcm=True, test_mode=False):
+                 low_alert_grams=150, low_alert_fcm=True, test_mode=False,
+                 api_key=''):
         self.bridge = bridge
         self.port = port
         self.host = host
         self.low_alert_grams = low_alert_grams
         self.low_alert_fcm = low_alert_fcm
         self.test_mode = test_mode
+        self.api_key = api_key
         self._active_alerts: List[Dict] = []
         self._db_lock = threading.Lock()
         self.db_path = TEST_DB_PATH if test_mode else DB_PATH
@@ -115,10 +118,13 @@ class FilamentTracker:
                 );
             """)
             # Add columns if upgrading from older schema
-            for col, default in [("is_rfid", "INTEGER DEFAULT 1"),
-                                 ("weight_offset", "INTEGER DEFAULT 0")]:
+            _MIGRATION_COLUMNS = {
+                "is_rfid": "INTEGER DEFAULT 1",
+                "weight_offset": "INTEGER DEFAULT 0",
+            }
+            for col, col_type in _MIGRATION_COLUMNS.items():
                 try:
-                    conn.execute(f"ALTER TABLE spools ADD COLUMN {col} {default}")
+                    conn.execute(f"ALTER TABLE spools ADD COLUMN {col} {col_type}")
                 except sqlite3.OperationalError:
                     pass  # Column already exists
             conn.close()
@@ -465,11 +471,34 @@ class FilamentTracker:
         app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
         app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
+        @app.after_request
+        def set_security_headers(response):
+            response.headers['Content-Security-Policy'] = (
+                "default-src 'self'; "
+                "script-src 'self' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src https://fonts.gstatic.com; "
+                "img-src 'self' data:; "
+                "connect-src 'self'"
+            )
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+            return response
+
         tracker = self
+
+        def require_api_key():
+            """Check API key on write endpoints. Returns error response or None."""
+            if not tracker.api_key:
+                return None
+            provided = request.headers.get('X-API-Key', '')
+            if not hmac.compare_digest(provided, tracker.api_key):
+                return jsonify({"error": "Invalid or missing API key"}), 403
 
         @app.route('/')
         def index():
-            return render_template('index.html', test_mode=tracker.test_mode)
+            return render_template('index.html', test_mode=tracker.test_mode,
+                                   api_key=tracker.api_key)
 
         @app.route('/api/spools')
         def api_spools():
@@ -524,6 +553,9 @@ class FilamentTracker:
 
         @app.route('/api/spools/<tray_uuid>', methods=['PATCH'])
         def api_spool_update(tray_uuid):
+            auth_error = require_api_key()
+            if auth_error:
+                return auth_error
             data = request.get_json()
             if not data:
                 return jsonify({"error": "No data provided"}), 400
@@ -548,6 +580,9 @@ class FilamentTracker:
 
         @app.route('/api/spools/<tray_uuid>', methods=['DELETE'])
         def api_spool_delete(tray_uuid):
+            auth_error = require_api_key()
+            if auth_error:
+                return auth_error
             with tracker._db_lock:
                 conn = tracker._get_conn()
                 try:
@@ -599,6 +634,9 @@ class FilamentTracker:
 
         @app.route('/api/alerts/<tray_uuid>', methods=['DELETE'])
         def api_alert_dismiss(tray_uuid):
+            auth_error = require_api_key()
+            if auth_error:
+                return auth_error
             with tracker._db_lock:
                 conn = tracker._get_conn()
                 try:
@@ -615,6 +653,9 @@ class FilamentTracker:
 
         @app.route('/api/settings/alert_threshold', methods=['POST'])
         def api_set_threshold():
+            auth_error = require_api_key()
+            if auth_error:
+                return auth_error
             data = request.get_json()
             if not data or "alert_threshold_grams" not in data:
                 return jsonify({"error": "Missing alert_threshold_grams"}), 400
@@ -682,17 +723,19 @@ def main():
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler('filament_tracker.log')
+            logging.FileHandler(os.path.join(_DATA_DIR, 'filament_tracker.log'))
         ]
     )
 
     if args.test:
         # ----- Test mode: no MQTT, mock data -----
+        api_key = os.environ.get('FILAMENT_TRACKER_API_KEY', '')
         tracker = FilamentTracker(
             bridge=None,
             port=args.port or 5000,
             host=args.host or '0.0.0.0',
             test_mode=True,
+            api_key=api_key,
         )
 
         ip = tracker._get_local_ip()
@@ -742,6 +785,7 @@ def main():
         host = args.host or getattr(_cfg, 'FILAMENT_TRACKER_HOST', '0.0.0.0')
         low_alert_grams = getattr(_cfg, 'FILAMENT_LOW_ALERT_GRAMS', 150)
         low_alert_fcm = getattr(_cfg, 'FILAMENT_LOW_ALERT_FCM', False)
+        api_key = os.environ.get('FILAMENT_TRACKER_API_KEY', '') or getattr(_cfg, 'FILAMENT_TRACKER_API_KEY', '')
         enable_notifications = getattr(_cfg, 'ENABLE_NOTIFICATIONS', False)
 
         # Create shared MQTT client
@@ -754,6 +798,7 @@ def main():
             host=host,
             low_alert_grams=low_alert_grams,
             low_alert_fcm=low_alert_fcm,
+            api_key=api_key,
         )
 
         # Register AMS callback
