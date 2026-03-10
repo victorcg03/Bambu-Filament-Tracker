@@ -6,13 +6,13 @@ Tracks all filament spools that have ever been loaded into the AMS.
 Provides a local-network web UI for monitoring filament inventory.
 
 Can run standalone (connects directly to Bambu MQTT), or be loaded as a
-module by BambuNowBar's notification server to share a single MQTT connection.
+module by Bambu Progress Notification's server to share a single MQTT connection.
 
 Standalone usage:
     python3 filament_tracker.py              # live mode (connects to MQTT)
     python3 filament_tracker.py --test       # test mode (mock data, no MQTT)
 
-As a module (loaded by BambuNowBar):
+As a module (loaded by Bambu Progress Notification):
     from filament_tracker import FilamentTracker
     tracker = FilamentTracker(bridge=mqtt_client, ...)
     mqtt_client.on_ams_data(tracker.update_ams_data)
@@ -804,9 +804,9 @@ def main():
         # Register AMS callback
         mqtt_client.on_ams_data(tracker.update_ams_data)
 
-        # Optional: load notification service from sibling BambuNowBar folder
+        # Optional: load notification service from sibling Bambu-Progress-Notification folder
         if enable_notifications:
-            _nowbar_path = os.path.normpath(os.path.join(_SERVER_DIR, '..', 'BambuNowBar', 'server'))
+            _nowbar_path = os.path.normpath(os.path.join(_SERVER_DIR, '..', 'Bambu-Progress-Notification', 'server'))
             if os.path.isdir(_nowbar_path):
                 sys.path.insert(0, _nowbar_path)
                 try:
@@ -820,7 +820,7 @@ def main():
                     logger.error(f"Failed to import notification service: {e}")
                     logger.error("Make sure firebase-admin is installed: pip install firebase-admin")
             else:
-                logger.warning(f"ENABLE_NOTIFICATIONS is True but BambuNowBar not found: {_nowbar_path}")
+                logger.warning(f"ENABLE_NOTIFICATIONS is True but Bambu-Progress-Notification not found: {_nowbar_path}")
 
         # Start Flask in daemon thread
         tracker.start()

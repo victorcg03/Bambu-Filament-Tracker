@@ -35,7 +35,7 @@ docker run -d -p 5000:5000 -v ./config.py:/app/config.py ebteam/filament-tracker
 - **Custom names & notes** — label your spools and add notes via the web UI
 - **Test mode** — preview the full UI with mock data, no printer or MQTT needed
 - **Docker support** — single-command deployment with persistent database volume
-- **Standalone or integrated** — runs on its own, or alongside [BambuNowBar](https://github.com/EBTEAM3/BambuNowBar) sharing a single MQTT connection
+- **Standalone or integrated** — runs on its own, or alongside [Bambu Progress Notification](https://github.com/EBTEAM3/Bambu-Progress-Notification) sharing a single MQTT connection
 
 ## Requirements
 
@@ -48,28 +48,29 @@ docker run -d -p 5000:5000 -v ./config.py:/app/config.py ebteam/filament-tracker
 
 ### Option A: Docker (Recommended)
 
-```bash
-git clone https://github.com/EBTEAM3/Bambu-Filament-Tracker.git
-cd FilamentTracker
+Pull the pre-built image from [Docker Hub](https://hub.docker.com/r/ebteam/filament-tracker):
 
-# Create your config
+```bash
+# Download the example config and fill in your Bambu credentials
+curl -O https://raw.githubusercontent.com/EBTEAM3/FilamentTracker/main/config.example.py
 cp config.example.py config.py
 nano config.py  # fill in your Bambu credentials
 
-# Build and run
-docker build -t filament-tracker .
+# Run from Docker Hub
 docker run -d \
   --name filament-tracker \
   --restart unless-stopped \
   -p 5000:5000 \
   -v "$(pwd)/config.py:/app/config.py" \
   -v filament-tracker-db:/app/data \
-  filament-tracker
+  ebteam/filament-tracker
 ```
 
 > **Windows PowerShell**: Replace `$(pwd)` with `${PWD}` or use the full path to `config.py`.
 
 The database is stored in a Docker volume so it persists across container restarts.
+
+To build locally instead, clone the repo and run `docker build -t filament-tracker .`
 
 ### Option B: Manual Python Setup
 
@@ -91,7 +92,7 @@ You need your **User ID**, **Access Token**, and **Printer Serial Number**.
 
 **Using Docker** (no Python install needed):
 ```bash
-docker run --rm -it filament-tracker python3 get_credentials.py
+docker run --rm -it ebteam/filament-tracker python3 get_credentials.py
 ```
 
 **Without Docker**:
@@ -102,7 +103,7 @@ python3 get_credentials.py
 
 This will prompt for your Bambu Lab email and password, handle 2FA, and output your credentials ready to paste into `config.py`.
 
-Alternatively, find them manually in Bambu Studio's config files — see the [BambuNowBar README](https://github.com/EBTEAM3/BambuNowBar#part-1-finding-your-bambu-credentials) for details.
+Alternatively, find them manually in Bambu Studio's config files — see the [Bambu Progress Notification README](https://github.com/EBTEAM3/Bambu-Progress-Notification#part-1-finding-your-bambu-credentials) for details.
 
 ### Configure
 
@@ -147,21 +148,21 @@ The AMS reports spool weight based on the RFID chip data and rotation tracking. 
 
 The offset is stored per spool ID and applied to all weight calculations, including low-stock alerts.
 
-## BambuNowBar Integration (Optional)
+## Bambu Progress Notification Integration (Optional)
 
-If you also use [BambuNowBar](https://github.com/EBTEAM3/BambuNowBar) for push notifications, you can run both services on a single MQTT connection.
+If you also use [Bambu Progress Notification](https://github.com/EBTEAM3/Bambu-Progress-Notification) for push notifications, you can run both services on a single MQTT connection.
 
 Clone both repos as sibling folders:
 
 ```
 YourFolder/
-  BambuNowBar/
+  Bambu-Progress-Notification/
   FilamentTracker/
 ```
 
-**Option A** — Run from BambuNowBar (recommended if you already have it set up):
+**Option A** — Run from Bambu Progress Notification (recommended if you already have it set up):
 
-Set `ENABLE_FILAMENT_TRACKER = True` in BambuNowBar's `config.py` and run `bambu_fcm_bridge.py`.
+Set `ENABLE_FILAMENT_TRACKER = True` in Bambu Progress Notification's `config.py` and run `bambu_fcm_bridge.py`.
 
 **Option B** — Run from FilamentTracker:
 
