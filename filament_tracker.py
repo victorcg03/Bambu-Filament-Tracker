@@ -675,6 +675,8 @@ class FilamentTracker:
         remain = d.get("remain_percent", 0)
         offset = d.get("weight_offset", 0) or 0
         d["remaining_grams"] = max(0, int((remain / 100) * weight) + offset)
+        if offset and weight:
+            d["remain_percent"] = max(0, min(100, round(d["remaining_grams"] / weight * 100)))
         d["is_low"] = self.low_alert_grams > 0 and d["remaining_grams"] < self.low_alert_grams
         return d
 

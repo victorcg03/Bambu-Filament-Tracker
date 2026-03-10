@@ -460,9 +460,8 @@ function closeModal() {
 function renderModal(spool) {
     const modal = document.getElementById('modal-content');
 
-    const safeUuid = escapeHtml(spool.tray_uuid);
     modal.innerHTML = `
-        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <button class="modal-close" id="modal-close-btn">&times;</button>
         <div class="modal-header">
             <div id="modal-spool-icon"></div>
             <div>
@@ -520,8 +519,8 @@ function renderModal(spool) {
             <textarea id="edit-notes" placeholder="Add notes...">${escapeHtml(spool.notes || '')}</textarea>
         </div>
         <div class="modal-actions">
-            <button class="save-btn" onclick="saveSpool('${safeUuid}')">Save Changes</button>
-            <button class="delete-btn" onclick="deleteSpool('${safeUuid}')">Delete Spool</button>
+            <button class="save-btn" id="modal-save-btn">Save Changes</button>
+            <button class="delete-btn" id="modal-delete-btn">Delete Spool</button>
         </div>
 
         <div class="chart-section">
@@ -530,6 +529,11 @@ function renderModal(spool) {
             <div class="chart-container"><canvas id="usage-chart"></canvas></div>
         </div>
     `;
+
+    // Attach event listeners (inline onclick is blocked by CSP)
+    document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+    document.getElementById('modal-save-btn').addEventListener('click', () => saveSpool(spool.tray_uuid));
+    document.getElementById('modal-delete-btn').addEventListener('click', () => deleteSpool(spool.tray_uuid));
 
     const iconContainer = document.getElementById('modal-spool-icon');
     iconContainer.appendChild(createSpoolIcon(spool.color_hex, spool.remain_percent, 72));
