@@ -4,8 +4,8 @@ A local-network web dashboard for tracking filament spool usage on Bambu Lab pri
 
 ## Pictures
 
-<img width="2550" height="1287" alt="Screenshot 2026-03-09 175327" src="https://github.com/user-attachments/assets/43d4736e-9fa8-4f49-82fb-b66c7b9a9747" />
-<img width="1739" height="386" alt="Screenshot 2026-03-08 140504" src="https://github.com/user-attachments/assets/599e8883-7ad9-4ffc-90e9-bd2ab6eae46b" />
+<img width="2550" height="1287" alt="Screenshot 2026-03-09 175327" src="https://github.com/user-attachments/assets/a8969108-d55a-4532-aa89-4680089dd420" />
+<img width="1739" height="386" alt="Screenshot 2026-03-08 140504" src="https://github.com/user-attachments/assets/9807ddfd-bed7-4a01-a604-701730d979ab" />
 <img width="658" height="1105" alt="Screenshot 2026-03-09 175349" src="https://github.com/user-attachments/assets/253a99f6-eb8f-4463-975c-00ec768a2d82" />
 
 ## How It Works
@@ -26,7 +26,7 @@ docker run -d -p 5000:5000 -v ./config:/app/config ebteam/filament-tracker
 
 ## Features
 
-- **Real-time AMS view** — see what's loaded in each AMS slot with live remaining weight
+- **Real-time AMS view** — see what's loaded in each AMS slot with live remaining weight as well as temperature and humidity
 - **Spool inventory** — every spool ever loaded is tracked, sortable by weight, material, or last seen
 - **Usage history charts** — per-spool usage graphed over time
 - **Low filament alerts** — configurable threshold with web UI and optional FCM push notifications
