@@ -42,8 +42,13 @@ def api_auth_login():
 
 @bp.route("/api/auth/logout", methods=["POST"])
 def api_auth_logout():
-    if tracker().auth_enabled and not tracker().auth_service.is_authenticated():
-        return error("Authentication required", 401)
+    if tracker().auth_enabled:
+        if not tracker().auth_service.is_authenticated():
+            return error("Authentication required", 401)
+        csrf_header = request.headers.get("X-CSRF-Token")
+        csrf_session = session.get("csrf_token")
+        if not csrf_header or not csrf_session or csrf_header != csrf_session:
+            return error("Invalid CSRF token", 403)
     session.clear()
     return jsonify({"ok": True})
 
