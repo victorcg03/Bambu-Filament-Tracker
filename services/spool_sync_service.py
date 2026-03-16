@@ -101,6 +101,11 @@ class SpoolSyncService:
         tray_now = ams_payload.get("tray_now")
         if tray_now is not None:
             self.tracker._tray_now = int(tray_now)
+        if "drying_mode" in ams_payload:
+            self.tracker._ams_drying_mode = bool(ams_payload.get("drying_mode"))
+        elif "is_drying" in ams_payload:
+            self.tracker._ams_drying_mode = bool(ams_payload.get("is_drying"))
+        self.tracker._last_ams_update_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     def _update_ams_environment(self, ams_units: Iterable[dict]):
         for unit in ams_units:
