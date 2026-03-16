@@ -7,6 +7,8 @@ const API_KEY = document.querySelector('meta[name="api-key"]')?.content || '';
 
 let spoolsData = [];
 let statusData = {};
+let amsInfo = {};
+let trayNow = -1;
 let currentSort = 'last_seen';
 
 // ---- Helpers ----
@@ -21,12 +23,28 @@ function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-function hexToRgb(hex) {
-    const h = hex.replace('#', '').substring(0, 6);
+function parseColor(hex) {
+    const h = (hex || 'CCCCCCFF').replace('#', '');
     const r = parseInt(h.substring(0, 2), 16);
     const g = parseInt(h.substring(2, 4), 16);
     const b = parseInt(h.substring(4, 6), 16);
-    return `rgb(${r}, ${g}, ${b})`;
+    const a = h.length >= 8 ? parseInt(h.substring(6, 8), 16) / 255 : 1;
+    return { r, g, b, a };
+}
+
+function hexToRgb(hex) {
+    const c = parseColor(hex);
+    return `rgb(${c.r}, ${c.g}, ${c.b})`;
+}
+
+function hexToRgba(hex) {
+    const c = parseColor(hex);
+    return `rgba(${c.r}, ${c.g}, ${c.b}, ${c.a})`;
+}
+
+function isTransparent(hex) {
+    const c = parseColor(hex);
+    return c.a < 0.9;
 }
 
 function timeAgo(isoStr) {
@@ -60,10 +78,11 @@ function spoolName(spool) {
 }
 
 function createSpoolIcon(colorHex, remainPercent, size) {
-    const color = hexToRgb(colorHex || 'CCCCCCFF');
+    const color = hexToRgba(colorHex || 'CCCCCCFF');
     const pct = Math.max(0, Math.min(100, remainPercent || 0));
     const el = document.createElement('div');
     el.className = 'spool-icon';
+    if (isTransparent(colorHex)) el.classList.add('transparent');
     el.style.width = size + 'px';
     el.style.height = size + 'px';
     el.style.background = `conic-gradient(${color} 0% ${pct}%, #333 ${pct}% 100%)`;
@@ -123,6 +142,8 @@ async function loadAll() {
         ]);
         spoolsData = spools;
         statusData = status;
+        amsInfo = status.ams_info || {};
+        trayNow = status.tray_now != null ? status.tray_now : -1;
         renderHeader(status);
         renderAMS(spools);
         renderInventory(spools);
@@ -161,6 +182,22 @@ function renderHeader(status) {
     } else {
         printInfo.style.display = 'none';
     }
+
+    // AMS environment (temp & humidity)
+    const envContainer = document.getElementById('ams-env');
+    const info = status.ams_info || {};
+    const keys = Object.keys(info).sort();
+    if (keys.length === 0) {
+        envContainer.innerHTML = '';
+        return;
+    }
+    envContainer.innerHTML = keys.map(id => {
+        const a = info[id];
+        const unitLabel = a.tray_count === 1 ? 'HT' : parseInt(id) + 1;
+        const temp = a.temp ? a.temp.toFixed(1) + '\u00B0C' : '--';
+        const hum = a.humidity ? a.humidity + '%' : (a.humidity_index ? a.humidity_index + '/5' : '--');
+        return `<div class="ams-env-item"><span class="ams-env-label">AMS ${escapeHtml(String(unitLabel))}</span><span class="ams-env-temp">${escapeHtml(temp)}</span><span class="ams-env-hum">${escapeHtml(hum)}</span></div>`;
+    }).join('');
 }
 
 // ---- Render: AMS Active Spools ----
@@ -182,22 +219,32 @@ function renderAMS(spools) {
         units[u].push(s);
     });
 
+    // Include AMS units that have amsInfo but no active spools (empty AMS-HT etc.)
+    Object.keys(amsInfo).forEach(id => {
+        if (!units[id]) units[id] = [];
+    });
+
     Object.keys(units).sort().forEach(unitId => {
         const unitDiv = document.createElement('div');
         unitDiv.className = 'ams-unit';
 
+        const info = amsInfo[unitId];
+        const trayCount = info ? info.tray_count : 4;
+        const isHT = trayCount === 1;
+
         const label = document.createElement('div');
         label.className = 'ams-unit-label';
-        label.textContent = `AMS ${parseInt(unitId) + 1}`;
+        label.textContent = isHT ? 'AMS-HT' : `AMS ${parseInt(unitId) + 1}`;
         unitDiv.appendChild(label);
 
         const row = document.createElement('div');
         row.className = 'ams-tray-row';
+        if (isHT) row.classList.add('ams-ht');
 
         const slotMap = {};
         units[unitId].forEach(s => { slotMap[s.last_tray_slot] = s; });
 
-        for (let slot = 0; slot < 4; slot++) {
+        for (let slot = 0; slot < trayCount; slot++) {
             const spool = slotMap[slot];
             if (spool) {
                 row.appendChild(createActiveCard(spool, slot));
@@ -213,7 +260,8 @@ function renderAMS(spools) {
 
 function createActiveCard(spool, slot) {
     const card = document.createElement('div');
-    card.className = 'spool-card';
+    const globalTray = (spool.last_ams_unit || 0) * 4 + slot;
+    card.className = 'spool-card' + (globalTray === trayNow ? ' printing' : '');
     card.onclick = () => openDetail(spool.tray_uuid);
 
     const badge = document.createElement('div');
@@ -260,6 +308,13 @@ function createActiveCard(spool, slot) {
             warn.textContent = 'LOW';
             card.appendChild(warn);
         }
+    }
+
+    if (globalTray === trayNow) {
+        const tag = document.createElement('div');
+        tag.className = 'in-use-tag';
+        tag.textContent = 'In Use';
+        card.appendChild(tag);
     }
 
     return card;
@@ -329,6 +384,13 @@ function renderInventory(spools) {
             norfidBadge.className = 'status-badge norfid';
             norfidBadge.textContent = 'Non-RFID';
             meta.appendChild(norfidBadge);
+        }
+
+        if (spool.is_active && (spool.last_ams_unit || 0) * 4 + (spool.last_tray_slot || 0) === trayNow) {
+            const inUseBadge = document.createElement('span');
+            inUseBadge.className = 'in-use-tag';
+            inUseBadge.textContent = 'In Use';
+            meta.appendChild(inUseBadge);
         }
 
         info.appendChild(meta);

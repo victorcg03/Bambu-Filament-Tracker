@@ -60,6 +60,8 @@ class FilamentTracker:
         self.test_mode = test_mode
         self.api_key = api_key
         self._active_alerts: List[Dict] = []
+        self._ams_info: Dict[int, Dict] = {}  # per-unit: temp, humidity, tray_count
+        self._tray_now: int = -1  # global tray index currently in use (-1 = none)
         self._db_lock = threading.Lock()
         self.db_path = TEST_DB_PATH if test_mode else DB_PATH
 
@@ -161,6 +163,25 @@ class FilamentTracker:
             if self.bridge and hasattr(self.bridge, 'state'):
                 job_name = self.bridge.state.job_name or ""
 
+            # Track which tray is currently printing
+            tray_now = ams_payload.get("tray_now", None)
+            if tray_now is not None:
+                self._tray_now = int(tray_now)
+
+            # Capture per-unit environment data (temp, humidity, tray count)
+            for unit in ams_units:
+                uid = int(unit.get("id", 0))
+                trays_list = unit.get("tray", [])
+                # humidity_raw = actual %, humidity = 1-5 index (inverted: 5=dry, 1=wet)
+                hum_raw = int(unit.get("humidity_raw", 0) or 0)
+                hum_idx = int(unit.get("humidity", 0) or 0)
+                self._ams_info[uid] = {
+                    "temp": float(unit.get("temp", 0) or 0),
+                    "humidity": hum_raw if hum_raw else None,
+                    "humidity_index": hum_idx,
+                    "tray_count": len(trays_list),
+                }
+
             with self._db_lock:
                 conn = self._get_conn()
                 try:
@@ -184,7 +205,8 @@ class FilamentTracker:
                                 remain = 100
                                 material = tray_type or "Unknown"
                                 color = tray.get("tray_color", "FFFFFFFF")
-                                tray_uuid = f"{SYNTHETIC_ID_PREFIX}{material}_{color}"
+                                # Use only RGB (first 6 chars) in ID — alpha can vary between boots
+                                tray_uuid = f"{SYNTHETIC_ID_PREFIX}{material}_{color[:6]}"
                                 logger.info(f"Non-RFID spool detected: {material} #{color[:6]} in AMS {ams_id} slot {tray_id}")
 
                             active_uuids.add(tray_uuid)
@@ -398,8 +420,8 @@ class FilamentTracker:
              "type": "ABS", "color": "222222FF", "weight": 1000, "remain": 14,
              "name": "ABS", "ams": 0, "slot": 2, "nmin": "240", "nmax": "270", "bed": "100"},
             {"uuid": "D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1", "tag": "D4E5F6A1B2C3D4E5",
-             "type": "TPU", "color": "00FF88FF", "weight": 500, "remain": 92,
-             "name": "TPU 95A", "ams": 0, "slot": 3, "nmin": "200", "nmax": "230", "bed": "50"},
+             "type": "PETG", "color": "3FBFEF55", "weight": 1000, "remain": 67,
+             "name": "PETG Clear Blue", "ams": 0, "slot": 3, "nmin": "230", "nmax": "260", "bed": "70"},
             {"uuid": "E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2", "tag": "E5F6A1B2C3D4E5F6",
              "type": "PLA", "color": "FFFFFFFF", "weight": 1000, "remain": 45,
              "name": "PLA Basic", "ams": 0, "slot": 0, "active": False, "nmin": "190", "nmax": "220", "bed": "60"},
@@ -409,9 +431,13 @@ class FilamentTracker:
             {"uuid": "1A2B3C4D5E6F1A2B3C4D5E6F1A2B3C4D", "tag": "1A2B3C4D5E6F1A2B",
              "type": "PETG", "color": "FF8800FF", "weight": 1000, "remain": 8,
              "name": "PETG HF", "ams": 0, "slot": 2, "active": False, "nmin": "230", "nmax": "260", "bed": "70"},
-            {"uuid": "NORFID_PLA_9B59B6FF", "tag": "",
+            {"uuid": "NORFID_PLA_9B59B6", "tag": "",
              "type": "PLA", "color": "9B59B6FF", "weight": 1000, "remain": 55,
              "name": "PLA", "ams": 1, "slot": 0, "rfid": False, "nmin": "190", "nmax": "220", "bed": "60"},
+            # AMS-HT (single slot unit)
+            {"uuid": "A7B8C9D0E1F2A7B8C9D0E1F2A7B8C9D0", "tag": "A7B8C9D0E1F2A7B8",
+             "type": "PLA-S", "color": "E74C3CFF", "weight": 750, "remain": 38,
+             "name": "PLA Silk", "ams": 2, "slot": 0, "nmin": "200", "nmax": "230", "bed": "60"},
         ]
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -459,6 +485,15 @@ class FilamentTracker:
                 conn.close()
 
         self._refresh_alerts()
+
+        # Mock AMS environment data for test mode
+        self._ams_info = {
+            0: {"temp": 24.5, "humidity": 23, "humidity_index": 4, "tray_count": 4},
+            1: {"temp": 23.0, "humidity": 18, "humidity_index": 5, "tray_count": 4},
+            2: {"temp": 25.0, "humidity": 15, "humidity_index": 5, "tray_count": 1},  # AMS-HT
+        }
+        self._tray_now = 2  # AMS 0, slot 2 (ABS spool) is currently printing
+
         logger.info(f"Filament Tracker: {len(test_spools)} test spools generated")
 
     # =========================================================================
@@ -606,6 +641,7 @@ class FilamentTracker:
                 "nozzle_temp": 0,
                 "bed_temp": 0,
                 "test_mode": tracker.test_mode,
+                "ams_info": {},
             }
             if tracker.test_mode:
                 status.update({
@@ -626,6 +662,8 @@ class FilamentTracker:
                     "nozzle_temp": s.nozzle_temp,
                     "bed_temp": s.bed_temp,
                 })
+            status["ams_info"] = {str(k): v for k, v in tracker._ams_info.items()}
+            status["tray_now"] = tracker._tray_now
             return jsonify(status)
 
         @app.route('/api/alerts')
