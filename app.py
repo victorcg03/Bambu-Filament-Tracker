@@ -28,6 +28,7 @@ from services.auth_service import AuthService
 from services.calibration_service import CalibrationService
 from services.dashboard_service import DashboardService
 from services.export_service import ExportService
+from services.job_history_service import JobHistoryService
 from services.spool_sync_service import SpoolSyncService
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,8 @@ class FilamentTracker:
         self._active_alerts = []
         self._ams_info = {}
         self._tray_now = -1
+        self._ams_drying_mode = None
+        self._last_ams_update_at = None
         self._db_lock = threading.Lock()
         self.logger = logger
 
@@ -76,6 +79,7 @@ class FilamentTracker:
         self.calibration_service = CalibrationService(self)
         self.dashboard_service = DashboardService(self)
         self.export_service = ExportService(self)
+        self.job_history_service = JobHistoryService(self)
 
         if not self.test_mode:
             self.cleanup_test_db()
@@ -212,6 +216,9 @@ class FilamentTracker:
 
     def update_ams_data(self, ams_payload: dict):
         self.spool_sync_service.update_ams_data(ams_payload)
+
+    def update_print_data(self, print_data: dict):
+        self.job_history_service.record_print_update(print_data)
 
     def _refresh_alerts(self):
         self.spool_sync_service.refresh_alerts()
@@ -400,6 +407,7 @@ def _run_live_mode(args, server_dir: str):
         api_key=options["api_key"],
     )
     mqtt_client.on_ams_data(tracker.update_ams_data)
+    mqtt_client.on_print_update(tracker.update_print_data)
 
     _attach_optional_notification_bridge(
         tracker=tracker,

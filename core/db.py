@@ -201,12 +201,35 @@ class DBManager:
                     FOREIGN KEY (spool_id) REFERENCES spool_instances(id)
                 );
 
+                CREATE TABLE IF NOT EXISTS print_job_history (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_name            TEXT NOT NULL,
+                    first_seen_at       TEXT NOT NULL,
+                    last_update_at      TEXT NOT NULL,
+                    last_state          TEXT,
+                    final_state         TEXT,
+                    last_progress       INTEGER,
+                    final_progress      INTEGER,
+                    last_layer_num      INTEGER,
+                    last_total_layers   INTEGER,
+                    error_code          TEXT,
+                    failure_reason      TEXT,
+                    tray_now_raw        INTEGER,
+                    ams_unit            INTEGER,
+                    tray_slot           INTEGER,
+                    spool_tray_uuid     TEXT,
+                    spool_material_type TEXT,
+                    spool_color_hex     TEXT,
+                    spool_is_rfid       INTEGER
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_spool_instances_rfid_uid ON spool_instances(rfid_uid);
                 CREATE INDEX IF NOT EXISTS idx_spool_instances_product ON spool_instances(filament_product_id);
                 CREATE INDEX IF NOT EXISTS idx_spool_instances_archived ON spool_instances(archived);
                 CREATE INDEX IF NOT EXISTS idx_calibration_profiles_scope ON calibration_profiles(scope_type, scope_id);
                 CREATE INDEX IF NOT EXISTS idx_calibration_runs_spool_date ON calibration_runs(spool_id, test_date DESC);
                 CREATE INDEX IF NOT EXISTS idx_presence_spool_event ON spool_presence_history(spool_id, event_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_print_job_history_last_update ON print_job_history(last_update_at DESC);
                 """
             )
             for col, col_type in {
@@ -217,6 +240,22 @@ class DBManager:
                     conn.execute(f"ALTER TABLE spools ADD COLUMN {col} {col_type}")
                 except sqlite3.OperationalError:
                     # Column already exists on upgraded databases.
+                    pass
+
+            for col, col_type in {
+                "error_code": "TEXT",
+                "failure_reason": "TEXT",
+                "tray_now_raw": "INTEGER",
+                "ams_unit": "INTEGER",
+                "tray_slot": "INTEGER",
+                "spool_tray_uuid": "TEXT",
+                "spool_material_type": "TEXT",
+                "spool_color_hex": "TEXT",
+                "spool_is_rfid": "INTEGER",
+            }.items():
+                try:
+                    conn.execute(f"ALTER TABLE print_job_history ADD COLUMN {col} {col_type}")
+                except sqlite3.OperationalError:
                     pass
             conn.commit()
         finally:
